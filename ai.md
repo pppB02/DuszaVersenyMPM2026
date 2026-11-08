@@ -1,45 +1,32 @@
-# Design notes and open-point decisions
+# Tervezési megjegyzések és a nyitott kérdésekre vonatkozó döntések
 
-- Log line numbers are relative to the first program line (first line after the map = 1).
-- Log entry = line number + optional parts: API name, evaluated argument, return value,
-  error code. API names: `isThere`, `step forward`, `turn by`, `mine here`, `print`.
-- Non-API errors log as `<line> <ERROR_CODE>`. Error closes the log without `EOR`.
-- Expressions are flat: operand, `not operand`, `isThere operand`, `operand op operand`.
-- Operands are read left to right, then the operator checks types. No short-circuit.
-- `step forward n` moves cell by cell. On a wall the robot stays on the last free cell.
-- Wrong-type or out-of-range API argument (bool, negative, `isThere` not 0..2) -> `E_BAD_ARG`.
-- Arithmetic results are not range-checked. Literals outside 0..100 are syntax errors.
-- Syntax errors produce an empty log file and exit code 2 in `-q` mode.
-- Executed lines counter includes `else` and every `while` check; limit is central
-  (`MAX_EXECUTED_LINES`).
-- Not run in the authoring sandbox: real pytest, Ruff, mypy (no network). Tests were run
-  with a minimal stand-in runner; run the real tools once locally.
+- A naplóban szereplő sorszámok az első programutasítástól számítandók. Ez a térképet követő első sor, amelynek sorszáma 1.
+- Egy naplóbejegyzés elemei: sorszám, valamint opcionálisan az API neve, a kiértékelt argumentum, a visszatérési érték és a hibakód. Az API-nevek: `isThere`, `step forward`, `turn by`, `mine here`, `print`.
+- A nem API-hívásból származó hibák naplóformátuma: `<sorszám> <ERROR_CODE>`. Hiba esetén a napló `EOR` bejegyzés nélkül zárul.
+- A kifejezések egyszerűek, nem ágyazhatók egymásba: operandus, `not operandus`, `isThere operandus`, illetve `operandus operátor operandus`.
+- Az operandusok kiértékelése balról jobbra történik, az operátor pedig ezt követően ellenőrzi a típusokat. Nincs rövidzáras kiértékelés.
+- A `step forward n` utasítás mezőről mezőre mozgatja a robotot. Fal esetén a robot az utolsó szabad mezőn marad.
+- Hibás típusú vagy megengedett tartományon kívüli API-argumentum esetén (például logikai érték, negatív szám, vagy az `isThere` esetén 0 és 2 közötti tartományon kívüli érték) a hibakód: `E_BAD_ARG`.
+- Az aritmetikai műveletek eredményeire nem történik tartományellenőrzés. A 0 és 100 közötti tartományon kívüli literálok szintaktikai hibát okoznak.
+- Szintaktikai hiba esetén a naplófájl üres marad, `-q` módban pedig a program 2-es kilépési kóddal áll le.
+- A végrehajtott sorok számlálója az `else` utasításokat és a `while` minden egyes feltételvizsgálatát is tartalmazza. A korlátot központilag, a `MAX_EXECUTED_LINES` konstans határozza meg.
+- A fejlesztői környezetben nem futottak le a valódi pytest-, Ruff- és mypy-eszközök (nem volt hálózati hozzáférés). A tesztelés egy minimális helyettesítő futtatóval történt; a valódi eszközöket helyben is futtatni kell.
 
-## Phases 6-8 decisions
+## Döntések a 6–8. fejlesztési fázishoz
 
-- Block tree (`BlockProgram`) is the only editable state. Source view is generated, read-only.
-- Operands are single tokens (number, `true`/`false`, variable name). A condition like `a = 1`
-  must be set into a variable first. Loading a file whose `if`/`while` condition is an
-  expression is refused with a message (blocks cannot represent it).
-- Empty control block is allowed while editing. Running it gives a syntax error.
-- Nesting limit (3) counts control blocks only. `else` shares the level of its `if`.
-- Run control is a Qt timer in the GUI thread (`RunController`). A run is capped at 1000
-  lines, so GUI stays responsive without a worker thread. Speed slider 1..10.
-- Debugger: `DebugSession` stops BEFORE each line. Current line is highlighted in source
-  view and in the block tree. Blocks and variables are locked/readable accordingly.
-- GUI log file: written when a run ends, if an output path was given on the command line.
-- Not verified: PySide6 is not installed in the authoring sandbox. UI files compile, but
-  were never started. First GUI launch may reveal bugs. Manual robot control (phase 9) not built.
+- A blokkok fája (`BlockProgram`) az egyetlen szerkeszthető állapot. A forráskódnézet ebből generálódik, és csak olvasható.
+- Az operandusok egyetlen tokenből állnak (szám, `true`/`false` vagy változónév). Egy olyan feltételt, mint az `a = 1`, először változóba kell menteni. Ha egy betöltött fájlban az `if` vagy `while` feltétele kifejezés, a betöltés figyelmeztető üzenettel elutasításra kerül, mert a blokkszerkesztő nem tudja ezt a formát ábrázolni.
+- Szerkesztés közben megengedett az üres vezérlőblokk. Futtatásakor azonban szintaktikai hiba keletkezik.
+- A beágyazási korlát (3 szint) csak a vezérlőblokkokra vonatkozik. Az `else` az azt tartalmazó `if` blokkal azonos szintű.
+- A futásvezérlést a grafikus felület szálában működő Qt-időzítő végzi (`RunController`). Egy futás legfeljebb 1000 sort dolgozhat fel, így külön munkaszál nélkül is válaszkész marad a grafikus felület. A sebességcsúszka értéke 1 és 10 közötti.
+- A hibakereső (`DebugSession`) minden programsor előtt megállítja a végrehajtást. Az aktuális sor kiemelve jelenik meg a forráskódnézetben és a blokkfában. A blokkok és a változók szerkeszthetősége, illetve olvashatósága ennek megfelelően korlátozott.
+- A grafikus felülethez tartozó naplófájl a futás befejezésekor íródik ki, amennyiben a parancssorban megadtak kimeneti útvonalat.
+- Nem ellenőrzött: a PySide6 nem volt telepítve a fejlesztői környezetben. A felületi fájlok szintaktikailag lefordulnak, de az alkalmazást nem indították el. Az első grafikus indításkor hibák merülhetnek fel. A manuális robotvezérlés ekkor még nem készült el (9. fázis).
 
-## Phase 9: manual control
+## 9. fázis: manuális vezérlés
 
-- `ManualControlService` (no Qt) reuses `Robot` for move, turn, mine. Every action first calls
-  `DebugSession.stop()`: active run ends, simulation is NOT reset, log is untouched.
-- Manual forward checks the map directly (`world.cell_at`), never `isThere`, so no discovery
-  side effect. Wall/edge: no move, no error code, message "Fal előtt – a robot megállt.".
-  Auto mode keeps `E_BEDROCK_HIT` (covered by a test).
-- Sensor display (`Sensor.peek`, dashed front cell on map) never marks discovery.
-- Stopping a run by manual control still triggers the normal "run finished" handler. If a
-  GUI output path was given, the PARTIAL program log (no EOR) is written then. Manual actions
-  add nothing to it.
-- Next Run or Restart resets the simulation as before.
+- A `ManualControlService` Qt-függőség nélkül, a meglévő `Robot` objektumot használja a mozgatáshoz, a forduláshoz és a bányászáshoz. Minden művelet először meghívja a `DebugSession.stop()` metódust: az aktív futás befejeződik, a szimuláció NEM áll vissza alaphelyzetbe, a napló változatlan marad.
+- A manuális előrelépés közvetlenül a térképet ellenőrzi (`world.cell_at`), és nem hívja meg az `isThere` függvényt, így nem jár a mező felfedezetté jelölésével. Fal vagy a térkép széle esetén nincs mozgás és nincs hibakód; a megjelenített üzenet: „Fal előtt – a robot megállt.” Automatikus módban továbbra is az `E_BEDROCK_HIT` hibakód érvényes (ezt teszt is ellenőrzi).
+- Az érzékelő megjelenítése (`Sensor.peek`, a térképen szaggatott vonallal jelölt előtte lévő mező) önmagában nem teszi felfedezetté a mezőt.
+- Ha a manuális vezérlés állítja le a futást, akkor is lefut a normál „futás befejeződött” kezelő. Ha a grafikus felülethez megadtak kimeneti útvonalat, ekkor a program részleges naplója íródik ki (`EOR` nélkül). A manuális műveletek nem adnak hozzá bejegyzéseket a naplóhoz.
+- A következő futtatás vagy az újraindítás a korábbiaknak megfelelően alaphelyzetbe állítja a szimulációt.
