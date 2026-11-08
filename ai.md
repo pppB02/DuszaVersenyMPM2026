@@ -30,3 +30,16 @@
 - GUI log file: written when a run ends, if an output path was given on the command line.
 - Not verified: PySide6 is not installed in the authoring sandbox. UI files compile, but
   were never started. First GUI launch may reveal bugs. Manual robot control (phase 9) not built.
+
+## Phase 9: manual control
+
+- `ManualControlService` (no Qt) reuses `Robot` for move, turn, mine. Every action first calls
+  `DebugSession.stop()`: active run ends, simulation is NOT reset, log is untouched.
+- Manual forward checks the map directly (`world.cell_at`), never `isThere`, so no discovery
+  side effect. Wall/edge: no move, no error code, message "Fal előtt – a robot megállt.".
+  Auto mode keeps `E_BEDROCK_HIT` (covered by a test).
+- Sensor display (`Sensor.peek`, dashed front cell on map) never marks discovery.
+- Stopping a run by manual control still triggers the normal "run finished" handler. If a
+  GUI output path was given, the PARTIAL program log (no EOR) is written then. Manual actions
+  add nothing to it.
+- Next Run or Restart resets the simulation as before.

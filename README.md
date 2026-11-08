@@ -22,4 +22,3 @@ mypy src
 ## Decisions on points the spec leaves open (see ai.md)
 
 See `ai.md`.
-"# DuszaVersenyMPM2026" 

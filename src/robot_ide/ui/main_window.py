@@ -21,10 +21,12 @@ from robot_ide.core.enums import RunStatus
 from robot_ide.core.exceptions import BlockEditError, InputFormatError, MineScriptSyntaxError
 from robot_ide.services.debug_session import DebugSession
 from robot_ide.services.file_service import read_text, write_text
+from robot_ide.services.manual_control import ManualControlService, ManualResult
 from robot_ide.services.project_service import ProjectService
 from robot_ide.ui.block_editor_widget import BlockEditorWidget
 from robot_ide.ui.console_widget import ConsoleWidget
 from robot_ide.ui.debugger_widget import DebuggerWidget
+from robot_ide.ui.manual_control_widget import ManualControlWidget
 from robot_ide.ui.map_widget import MapWidget
 from robot_ide.ui.robot_widget import RobotStatusWidget
 from robot_ide.ui.run_controller import RunController, RunnerState
@@ -56,6 +58,8 @@ class MainWindow(QMainWindow):
         self._code = GeneratedCode()
         self._session = DebugSession(project.simulation)
         self._controller = RunController(self._session, self)
+        self._manual = ManualControlService(self._session)
+        self._manualMode = False
 
         self._blocks = BlockEditorWidget(project.program)
         self._source = SourceCodeWidget()
@@ -64,6 +68,7 @@ class MainWindow(QMainWindow):
         self._debugger = DebuggerWidget()
         self._variables = VariableWidget()
         self._console = ConsoleWidget()
+        self._manualPanel = ManualControlWidget()
         self._revealCheck = QCheckBox("Teljes térkép mutatása")
         self._docks: dict[str, QDockWidget] = {}
         self._build_layout()
@@ -86,6 +91,7 @@ class MainWindow(QMainWindow):
         bottom = Qt.DockWidgetArea.BottomDockWidgetArea
         self._docks["blocks"] = self._add_dock("Blokkszerkesztő", self._blocks, left)
         self._docks["source"] = self._add_dock("Forráskód", self._source, left)
+        self._docks["manual"] = self._add_dock("Kézi vezérlés", self._manualPanel, right)
         self._docks["debugger"] = self._add_dock("Debugger", self._debugger, right)
         self._docks["variables"] = self._add_dock("Változók", self._variables, right)
         self._docks["console"] = self._add_dock("Konzol / Napló / Hibák", self._console, bottom)
@@ -154,6 +160,13 @@ class MainWindow(QMainWindow):
         self._controller.finished.connect(self._on_run_finished)
         self._speedSlider.valueChanged.connect(self._controller.set_speed)
         self._revealCheck.toggled.connect(self._map.set_reveal_all)
+        panel = self._manualPanel
+        manual = self._manual
+        panel.forwardRequested.connect(lambda: self._manual_action(manual.step_forward))
+        panel.turnRequested.connect(
+            lambda count: self._manual_action(lambda: manual.turn_left(count))
+        )
+        panel.mineRequested.connect(lambda: self._manual_action(manual.mine_here))
 
     # ---- project / files ----------------------------------------------------------------
 
@@ -197,6 +210,7 @@ class MainWindow(QMainWindow):
         self._after_project_replaced()
 
     def _after_project_replaced(self) -> None:
+        self._manualMode = False
         self._controller.stop()
         self._session.set_simulation(self._project.simulation)
         self._map.set_simulation(self._project.simulation)
@@ -211,11 +225,22 @@ class MainWindow(QMainWindow):
         self._code = self._project.generated_code()
         self._source.show_code(self._code.lines)
 
+    def _manual_action(self, action: Callable[[], ManualResult]) -> None:
+        """Run one manual action; it stops an active program run first (no reset, no log)."""
+        self._manualMode = True
+        result = action()
+        self._manualPanel.show_feedback(result.message)
+        self.statusBar().showMessage(result.message, 4000)
+        self._controller.sync_after_external_stop()
+        self._refresh_run_views()
+
     def _start_run(self) -> None:
+        self._manualMode = False
         self._console.clear_all()
         self._controller.run(self._code.text)
 
     def _restart(self) -> None:
+        self._manualMode = False
         self._console.clear_all()
         self._controller.restart()
 
@@ -223,6 +248,7 @@ class MainWindow(QMainWindow):
         if self._controller.state is RunnerState.PAUSED:
             self._controller.step()
         elif not self._controller.is_active:
+            self._manualMode = False
             self._console.clear_all()
             self._controller.debug(self._code.text)
 
@@ -256,6 +282,8 @@ class MainWindow(QMainWindow):
             return "Fut"
         if state is RunnerState.PAUSED:
             return "Szünetel"
+        if self._manualMode:
+            return "Kézi vezérlés"
         error = self._session.runtimeError
         if error is not None:
             return f"Hiba: {error.errorCode.value}"

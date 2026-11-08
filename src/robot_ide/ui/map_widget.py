@@ -5,6 +5,7 @@ from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPolygonF
 from PySide6.QtWidgets import QWidget
 
 from robot_ide.core.enums import CellType, Direction
+from robot_ide.simulator.sensor import Sensor
 from robot_ide.simulator.simulation_state import SimulationState
 from robot_ide.ui.styles import LIGHT, MapColors, map_colors
 
@@ -83,8 +84,8 @@ class MapWidget(QWidget):
 
     def _draw_sensor(self, painter: QPainter, offsetX: float, offsetY: float, size: float) -> None:
         assert self._simulation is not None
-        target = self._simulation.robot.sensorTarget
-        if target is None:
+        target = Sensor(self._simulation).front_position()
+        if not self._simulation.world.is_inside(*target):
             return
         pen = QPen(QColor(self._colors.sensor), max(2.0, size / 12))
         pen.setStyle(Qt.PenStyle.DashLine)

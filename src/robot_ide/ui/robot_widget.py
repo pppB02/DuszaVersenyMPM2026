@@ -2,8 +2,13 @@
 
 from PySide6.QtWidgets import QGridLayout, QLabel, QWidget
 
+from robot_ide.core.enums import CellType
+from robot_ide.simulator.sensor import Sensor
 from robot_ide.simulator.simulation_state import SimulationState
 from robot_ide.ui.map_widget import DIRECTION_NAMES
+
+
+_SENSOR_TEXT = {CellType.EMPTY: "üres kamra", CellType.WALL: "fal", CellType.GOLD: "aranyrög"}
 
 
 class RobotStatusWidget(QWidget):
@@ -18,7 +23,7 @@ class RobotStatusWidget(QWidget):
             ("position", "Pozíció"),
             ("direction", "Irány"),
             ("gold", "Arany"),
-            ("sensor", "Érzékelő"),
+            ("sensor", "Érzékelő (elöl)"),
             ("state", "Állapot"),
         ]
         for column, (key, title) in enumerate(titles):
@@ -30,7 +35,7 @@ class RobotStatusWidget(QWidget):
     def update_from(self, simulation: SimulationState, runState: str) -> None:
         """Refresh all fields from the central model."""
         robot = simulation.robot
-        sensor = "-" if robot.sensorResult is None else ("igaz" if robot.sensorResult else "hamis")
+        sensor = _SENSOR_TEXT[Sensor(simulation).peek()]
         self._labels["position"].setText(f"({robot.x}, {robot.y})")
         self._labels["direction"].setText(DIRECTION_NAMES[robot.direction])
         self._labels["gold"].setText(str(robot.minedGold))

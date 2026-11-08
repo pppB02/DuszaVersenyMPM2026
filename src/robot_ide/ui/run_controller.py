@@ -101,6 +101,12 @@ class RunController(QObject):
             self._session.stop()
             self._finish()
 
+    def sync_after_external_stop(self) -> None:
+        """Bring the controller in line after the session was stopped by manual control."""
+        if self.is_active and not self._session.is_active:
+            self._timer.stop()
+            self._finish()
+
     def _begin(self, programText: str, debug: bool) -> bool:
         self._timer.stop()
         self.lastProgramText = programText

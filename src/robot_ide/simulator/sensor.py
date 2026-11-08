@@ -18,6 +18,17 @@ class Sensor:
     def __init__(self, state: SimulationState) -> None:
         self._state = state
 
+    def front_position(self) -> tuple[int, int]:
+        """Coordinates of the cell directly ahead (may lie off the map)."""
+        robot = self._state.robot
+        deltaX, deltaY = robot.direction.delta
+        return robot.x + deltaX, robot.y + deltaY
+
+    def peek(self) -> CellType:
+        """What lies ahead, for display only. Never marks the cell as discovered."""
+        targetX, targetY = self.front_position()
+        return self._state.world.cell_at(targetX, targetY)
+
     def is_there(self, cellKind: int) -> bool:
         """True if the cell ahead has the given kind (0 empty, 1 wall, 2 gold).
 

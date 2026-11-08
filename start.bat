@@ -1,0 +1,1 @@
+python .\main.py .\input_video_program.txt output.txt
